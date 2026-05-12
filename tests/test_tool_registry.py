@@ -1,6 +1,6 @@
 import pytest
 
-from recon_ai.mcp.registry import ToolRegistry
+from scanguard.mcp.registry import ToolRegistry
 
 
 def test_tool_registry_contains_expected_tools() -> None:
@@ -19,4 +19,5 @@ def test_registry_rejects_duplicate_registration() -> None:
     tool = registry.get("nmap_basic")
     with pytest.raises(ValueError):
         registry.register(tool)
+
 

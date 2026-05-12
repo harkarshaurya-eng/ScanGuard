@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from recon_ai.reports.report_generator import ReportGenerator
-from recon_ai.storage.models import FindingRecord, ToolRunRecord
-from recon_ai.storage.workspace import create_workspace
-from recon_ai.utils.time import utc_iso
+from scanguard.reports.report_generator import ReportGenerator
+from scanguard.storage.models import FindingRecord, ToolRunRecord
+from scanguard.storage.workspace import create_workspace
+from scanguard.utils.time import utc_iso
 
 
 def test_report_generation_outputs_all_formats(tmp_path: Path) -> None:
@@ -49,4 +49,5 @@ def test_report_generation_outputs_all_formats(tmp_path: Path) -> None:
     assert html.path.exists()
     assert js.path.exists()
     assert "Admin interface exposed" in md.path.read_text(encoding="utf-8")
+
 

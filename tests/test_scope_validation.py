@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from recon_ai.utils.validators import ScopeAuthorizer, normalize_target
+from scanguard.utils.validators import ScopeAuthorizer, normalize_target
 
 
 def test_scope_validation_exact_wildcard_and_cidr(tmp_path: Path) -> None:
@@ -32,4 +32,5 @@ def test_scope_validation_rejects_bypass_like_paths(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         normalize_target("https://example.com/admin/../../evil")
     assert not authorizer.is_authorized("example.com.evil.org")
+
 

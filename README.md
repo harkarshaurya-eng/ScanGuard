@@ -1,12 +1,12 @@
-# ScanGuard-ai
+# ScanGuard
 
-ScanGuard-ai is a production-style, terminal-first reconnaissance assistant for **authorized** cybersecurity testing on Kali Linux. It combines a local MCP-style tool registry, safety-enforced subprocess execution, structured result parsing, SQLite-backed project storage, Rich terminal UX, and optional Groq-powered AI guidance.
+ScanGuard is a production-style, terminal-first reconnaissance assistant for **authorized** cybersecurity testing on Kali Linux. It combines a local MCP-style tool registry, safety-enforced subprocess execution, structured result parsing, SQLite-backed project storage, Rich terminal UX, and optional Groq-powered AI guidance.
 
-The CLI entrypoint is `recon-ai`, and the Python package is `recon_ai`.
+The CLI entrypoint is `scanguard`, and the Python package is `scanguard`.
 
 ## Legal and Ethical Warning
 
-Use this tool only with **explicit written authorization** for the target environment. ScanGuard-ai is designed for safe reconnaissance workflows, not exploitation. It intentionally refuses credential attacks, brute forcing, destructive exploitation, persistence, stealth, payload delivery, malware behavior, or denial-of-service activity.
+Use this tool only with **explicit written authorization** for the target environment. ScanGuard is designed for safe reconnaissance workflows, not exploitation. It intentionally refuses credential attacks, brute forcing, destructive exploitation, persistence, stealth, payload delivery, malware behavior, or denial-of-service activity.
 
 You are responsible for:
 
@@ -17,7 +17,7 @@ You are responsible for:
 
 ## What It Does
 
-ScanGuard-ai provides:
+ScanGuard provides:
 
 - scope validation from `scope.txt` files
 - project workspace creation per target
@@ -67,7 +67,7 @@ Intentionally excluded:
 The codebase is organized like this:
 
 ```text
-recon_ai/
+scanguard/
 ├── ai/         # Groq client, prompt layering, safety, memory, agent behavior
 ├── mcp/        # tool schemas, permissions, executor, registry
 ├── parsers/    # parser modules for nmap, httpx, nuclei, nikto, generic text
@@ -93,7 +93,7 @@ Each tool is defined in code with:
 - rate limit
 - allowed target types
 
-The registry lives in [recon_ai/mcp/registry.py](recon_ai/mcp/registry.py) and produces a strict local catalog. Execution is handled by [recon_ai/mcp/executor.py](recon_ai/mcp/executor.py), which:
+The registry lives in [scanguard/mcp/registry.py](scanguard/mcp/registry.py) and produces a strict local catalog. Execution is handled by [scanguard/mcp/executor.py](scanguard/mcp/executor.py), which:
 
 - avoids `shell=True`
 - validates arguments before subprocess launch
@@ -118,8 +118,8 @@ The default safety model is:
 ### 1. Clone the project
 
 ```bash
-git clone https://github.com/your-org/recon-ai.git
-cd recon-ai
+git clone https://github.com/your-org/scanguard.git
+cd scanguard
 ```
 
 ### 2. Create a virtual environment
@@ -145,12 +145,12 @@ python3 -m pip install -e ".[dev]"
 ### 4. Run initialization
 
 ```bash
-recon-ai init
+scanguard init
 ```
 
 This will:
 
-- create `~/.config/recon-ai/system_prompt.md` if missing
+- create `~/.config/scanguard/system_prompt.md` if missing
 - create a local `.env` in your current directory if missing
 - create the workspace root
 - show which supported binaries are installed or missing
@@ -163,7 +163,7 @@ Set your Groq API key in `.env` or environment variables:
 GROQ_API_KEY=your_key_here
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-RECON_AI_AUTO_SAFE=false
+SCANGUARD_AUTO_SAFE=false
 ```
 
 The code does **not** hardcode API keys.
@@ -181,7 +181,7 @@ If `GROQ_API_KEY` is missing, the tool still works in offline guidance mode for:
 The user-editable prompt lives at:
 
 ```text
-~/.config/recon-ai/system_prompt.md
+~/.config/scanguard/system_prompt.md
 ```
 
 The final prompt stack always includes:
@@ -192,64 +192,64 @@ The final prompt stack always includes:
 4. project context prompt
 5. current user message
 
-The immutable safety layer is defined in [recon_ai/constants.py](recon_ai/constants.py) and is always prepended before any Groq request.
+The immutable safety layer is defined in [scanguard/constants.py](scanguard/constants.py) and is always prepended before any Groq request.
 
 ## Usage
 
 ### Initialize
 
 ```bash
-recon-ai init
+scanguard init
 ```
 
 ### Start a project
 
 ```bash
-recon-ai start --target example.com --scope examples/scope.txt
+scanguard start --target example.com --scope examples/scope.txt
 ```
 
 ### Start with automatic approval for `active_safe` tools
 
 ```bash
-recon-ai start --target example.com --scope examples/scope.txt --auto-safe
+scanguard start --target example.com --scope examples/scope.txt --auto-safe
 ```
 
 ### Resume chat
 
 ```bash
-recon-ai chat --project example-com-1234abcd
+scanguard chat --project example-com-1234abcd
 ```
 
 ### Manually run a tool inside an existing project
 
 ```bash
-recon-ai run-tool nmap_basic --project example-com-1234abcd --target example.com
+scanguard run-tool nmap_basic --project example-com-1234abcd --target example.com
 ```
 
 ### Manually run a tool by creating a new scoped workspace
 
 ```bash
-recon-ai run-tool httpx_probe --target https://example.com --scope examples/scope.txt --auto-safe
+scanguard run-tool httpx_probe --target https://example.com --scope examples/scope.txt --auto-safe
 ```
 
 ### Generate reports
 
 ```bash
-recon-ai report --project example-com-1234abcd --format markdown
-recon-ai report --project example-com-1234abcd --format html
-recon-ai report --project example-com-1234abcd --format json
+scanguard report --project example-com-1234abcd --format markdown
+scanguard report --project example-com-1234abcd --format html
+scanguard report --project example-com-1234abcd --format json
 ```
 
 ### List projects and findings
 
 ```bash
-recon-ai projects
-recon-ai findings --project example-com-1234abcd
+scanguard projects
+scanguard findings --project example-com-1234abcd
 ```
 
 ## Interactive Chat Commands
 
-Inside `recon-ai chat` or `recon-ai start`, you can use:
+Inside `scanguard chat` or `scanguard start`, you can use:
 
 - `/help`
 - `/tools`
@@ -311,15 +311,15 @@ Report sections include:
 
 ## How to Add a New Tool Wrapper
 
-1. Add a wrapper in one of the modules under [recon_ai/tools](recon_ai/tools).
+1. Add a wrapper in one of the modules under [scanguard/tools](scanguard/tools).
 2. Define a `ToolDefinition` with:
    - a safe command builder
    - allowed target types
    - timeout and rate limit
    - parser callback
    - confirmation behavior
-3. Register the tool in [recon_ai/mcp/registry.py](recon_ai/mcp/registry.py).
-4. Add or update a parser under [recon_ai/parsers](recon_ai/parsers).
+3. Register the tool in [scanguard/mcp/registry.py](scanguard/mcp/registry.py).
+4. Add or update a parser under [scanguard/parsers](scanguard/parsers).
 5. Add tests covering:
    - argument safety
    - parser behavior
@@ -335,7 +335,7 @@ Report sections include:
 
 ### A Kali tool is missing
 
-Run `recon-ai init` and review the availability table. Install the required package on Kali and rerun the command.
+Run `scanguard init` and review the availability table. Install the required package on Kali and rerun the command.
 
 ### The target is rejected as out of scope
 
@@ -367,7 +367,7 @@ ruff check .
 Run mypy:
 
 ```bash
-mypy recon_ai
+mypy scanguard
 ```
 
 ## Security Limitations
@@ -386,4 +386,5 @@ mypy recon_ai
 - multi-target batch orchestration
 - stronger deduplication and evidence correlation
 - optional SARIF export
+
 

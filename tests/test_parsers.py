@@ -1,7 +1,7 @@
-from recon_ai.parsers.httpx_parser import parse_httpx_output
-from recon_ai.parsers.nikto_parser import parse_nikto_output
-from recon_ai.parsers.nmap_parser import parse_nmap_xml
-from recon_ai.parsers.nuclei_parser import parse_nuclei_output
+from scanguard.parsers.httpx_parser import parse_httpx_output
+from scanguard.parsers.nikto_parser import parse_nikto_output
+from scanguard.parsers.nmap_parser import parse_nmap_xml
+from scanguard.parsers.nuclei_parser import parse_nuclei_output
 
 
 def test_nmap_parser_extracts_service_and_risky_port() -> None:
@@ -36,4 +36,5 @@ def test_nikto_parser_flags_directory_listing() -> None:
     stdout = "+ /icons/: Directory indexing found.\n"
     parsed = parse_nikto_output(stdout, "https://example.com")
     assert parsed.findings[0].title == "Directory listing exposed"
+
 

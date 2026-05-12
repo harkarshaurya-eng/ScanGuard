@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md LICENSE ./
-COPY recon_ai ./recon_ai
+COPY scanguard ./scanguard
 COPY examples ./examples
 
 RUN python -m pip install --upgrade pip && python -m pip install .
 
-ENTRYPOINT ["recon-ai"]
+ENTRYPOINT ["scanguard"]
+
 

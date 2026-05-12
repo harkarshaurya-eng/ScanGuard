@@ -2,9 +2,9 @@ import sys
 
 import pytest
 
-from recon_ai.ai.safety import assess_user_message, classify_user_message
-from recon_ai.mcp.registry import ToolRegistry
-from recon_ai.utils.shell import safe_run_command, validate_command_args
+from scanguard.ai.safety import assess_user_message, classify_user_message
+from scanguard.mcp.registry import ToolRegistry
+from scanguard.utils.shell import safe_run_command, validate_command_args
 
 
 def test_ai_safety_refuses_unsafe_request() -> None:
@@ -28,4 +28,5 @@ def test_command_injection_string_is_treated_as_literal_argument() -> None:
 def test_dangerous_flags_are_blocked() -> None:
     with pytest.raises(ValueError):
         validate_command_args(["nmap", "-A", "example.com"])
+
 
