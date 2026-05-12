@@ -1,0 +1,5 @@
+# Example authorized scope
+example.com
+*.example.com
+192.168.1.0/24
+

@@ -1,0 +1,94 @@
+# {{ title }}
+
+Generated: {{ generated_at }}
+
+## Legal Authorization Reminder
+
+{{ legal_notice }}
+
+## Executive Summary
+
+{{ executive_summary }}
+
+## Scope
+
+- Target: `{{ project.target }}`
+- Scope file: `{{ scope }}`
+- Project ID: `{{ project.id }}`
+
+## Methodology
+
+{% for item in methodology %}
+- {{ item }}
+{% endfor %}
+
+## Tools Used
+
+{% for tool in tools_used %}
+- `{{ tool }}`
+{% endfor %}
+
+## Asset Inventory
+
+{% for asset in asset_inventory %}
+- `{{ asset.asset_type }}`: `{{ asset.value }}`
+{% endfor %}
+
+## Open Ports and Services
+
+{% if open_services %}
+{% for service in open_services %}
+- `{{ service.value }}`
+{% endfor %}
+{% else %}
+No service assets were parsed from the current evidence.
+{% endif %}
+
+## Web Technologies and Reachable Assets
+
+{% if web_assets %}
+{% for asset in web_assets %}
+- `{{ asset.value }}`
+{% endfor %}
+{% else %}
+No web assets were parsed from the current evidence.
+{% endif %}
+
+## Findings Table
+
+| Severity | Title | Asset | Source Tool |
+| --- | --- | --- | --- |
+{% for finding in findings %}
+| {{ finding.severity }} | {{ finding.title }} | {{ finding.affected_asset }} | {{ finding.source_tool }} |
+{% endfor %}
+
+## Detailed Findings
+
+{% if findings %}
+{% for finding in findings %}
+### {{ finding.title }}
+
+- Severity: `{{ finding.severity }}`
+- Confidence: `{{ finding.confidence }}`
+- Asset: `{{ finding.affected_asset }}`
+- Source tool: `{{ finding.source_tool }}`
+- Evidence: {{ finding.evidence }}
+- Recommendation: {{ finding.recommendation }}
+
+{% endfor %}
+{% else %}
+No findings were flagged by the current parser set.
+{% endif %}
+
+## Evidence and Raw Output Appendix
+
+{% for item in raw_output_appendix %}
+- `{{ item.tool_name }}` stdout: `{{ item.stdout_path }}` stderr: `{{ item.stderr_path }}` exit code: `{{ item.exit_code }}`
+{% endfor %}
+
+## Timeline
+
+{% for event in timeline %}
+- `{{ event.created_at }}` - `{{ event.tool_name }}` against `{{ event.target }}` (`{{ event.safety_category }}`)
+{% endfor %}
+

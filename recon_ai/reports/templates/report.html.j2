@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2937; }
+    h1, h2, h3 { color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 0.5rem; text-align: left; }
+    .notice { background: #fef3c7; padding: 1rem; border-left: 4px solid #f59e0b; }
+    .meta { color: #475569; }
+    code { background: #f8fafc; padding: 0.1rem 0.25rem; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <p class="meta">Generated: {{ generated_at }}</p>
+  <div class="notice">{{ legal_notice }}</div>
+
+  <h2>Executive Summary</h2>
+  <p>{{ executive_summary }}</p>
+
+  <h2>Scope</h2>
+  <ul>
+    <li>Target: <code>{{ project.target }}</code></li>
+    <li>Scope file: <code>{{ scope }}</code></li>
+    <li>Project ID: <code>{{ project.id }}</code></li>
+  </ul>
+
+  <h2>Methodology</h2>
+  <ul>
+    {% for item in methodology %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+
+  <h2>Tools Used</h2>
+  <ul>
+    {% for tool in tools_used %}
+    <li><code>{{ tool }}</code></li>
+    {% endfor %}
+  </ul>
+
+  <h2>Findings</h2>
+  <table>
+    <thead>
+      <tr><th>Severity</th><th>Title</th><th>Asset</th><th>Source Tool</th></tr>
+    </thead>
+    <tbody>
+      {% for finding in findings %}
+      <tr>
+        <td>{{ finding.severity }}</td>
+        <td>{{ finding.title }}</td>
+        <td>{{ finding.affected_asset }}</td>
+        <td>{{ finding.source_tool }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Detailed Findings</h2>
+  {% if findings %}
+    {% for finding in findings %}
+    <h3>{{ finding.title }}</h3>
+    <ul>
+      <li>Severity: <code>{{ finding.severity }}</code></li>
+      <li>Confidence: <code>{{ finding.confidence }}</code></li>
+      <li>Asset: <code>{{ finding.affected_asset }}</code></li>
+      <li>Source tool: <code>{{ finding.source_tool }}</code></li>
+      <li>Evidence: {{ finding.evidence }}</li>
+      <li>Recommendation: {{ finding.recommendation }}</li>
+    </ul>
+    {% endfor %}
+  {% else %}
+    <p>No findings were flagged by the current parser set.</p>
+  {% endif %}
+
+  <h2>Raw Output Appendix</h2>
+  <ul>
+    {% for item in raw_output_appendix %}
+    <li><code>{{ item.tool_name }}</code> stdout: <code>{{ item.stdout_path }}</code> stderr: <code>{{ item.stderr_path }}</code> exit code: <code>{{ item.exit_code }}</code></li>
+    {% endfor %}
+  </ul>
+</body>
+</html>
+
