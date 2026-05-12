@@ -1,5 +1,4 @@
-# Example authorized scope
-example.com
-*.example.com
-192.168.1.0/24
+www.google.com
+www.pccoepune.com
+pccoepune.com
 
