@@ -3,13 +3,14 @@
 ## Installation Commands
 
 ```bash
-git clone https://github.com/harkarshaurya-eng/ScanGuard.git
 cd ScanGuard
+git clone https://github.com/harkarshaurya-eng/ScanGuard.git
+
 python3 -m venv .venv
 source .venv/bin/activate
 cp .env.example .env
 python3 -m pip install --force-reinstall -e 
-htop .
+htop 
 ```
 
 Use the single Groq key you already pasted into `.env`.
