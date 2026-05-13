@@ -34,6 +34,7 @@ class AppSettings(BaseSettings):
     groq_base_url: str = Field(default=DEFAULT_GROQ_BASE_URL, validation_alias="GROQ_BASE_URL")
     auto_safe: bool = False
     workspace_root: Path = DEFAULT_WORKSPACE_ROOT
+    httpx_binary: str | None = None
     http_timeout_seconds: int = DEFAULT_HTTP_TIMEOUT_SECONDS
     log_level: str = "INFO"
     sqlite_busy_timeout_ms: int = 5000
@@ -80,6 +81,7 @@ def ensure_env_file(base_dir: Path) -> Path:
                     f"GROQ_MODEL={DEFAULT_GROQ_MODEL}",
                     f"GROQ_BASE_URL={DEFAULT_GROQ_BASE_URL}",
                     "SCANGUARD_AUTO_SAFE=false",
+                    "SCANGUARD_HTTPX_BINARY=",
                     "",
                 ]
             ),

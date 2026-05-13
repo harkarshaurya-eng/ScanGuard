@@ -12,13 +12,18 @@ from scanguard.parsers.httpx_parser import parse_httpx_output
 from scanguard.parsers.nikto_parser import parse_nikto_output
 from scanguard.parsers.nuclei_parser import parse_nuclei_output
 from scanguard.storage.models import ParsedFinding, ParsedToolOutput
-from scanguard.tools.base import as_url, no_extra_args
+from scanguard.tools.base import as_url, no_extra_args, resolve_binary_candidate
 
 
 def _httpx_command(input_data: ToolExecutionInput) -> list[str]:
     no_extra_args(input_data)
-    return [
+    binary = resolve_binary_candidate(
         "httpx",
+        env_var="SCANGUARD_HTTPX_BINARY",
+        validator_name="projectdiscovery_httpx",
+    )
+    return [
+        binary,
         "-u",
         as_url(input_data.target),
         "-json",

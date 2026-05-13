@@ -53,6 +53,13 @@ example.com.recon.txt
 scanguard --target example.com --scope myscope.txt
 scanguard --target example.com --allow-careful
 scanguard --target example.com --objective "Map the external attack surface and generate reports"
+python3 -m scanguard --target example.com --scope myscope.txt
+```
+
+If `httpx_probe` picks the wrong `httpx` binary on your system, set the ProjectDiscovery path in `.env`:
+
+```text
+SCANGUARD_HTTPX_BINARY=/usr/local/bin/httpx
 ```
 
 ## Other Commands

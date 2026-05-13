@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -35,7 +36,10 @@ DEFAULT_SCOPE_FILE = Path("scope.txt")
 
 
 def get_settings() -> AppSettings:
-    return AppSettings()
+    settings = AppSettings()
+    if settings.httpx_binary:
+        os.environ["SCANGUARD_HTTPX_BINARY"] = settings.httpx_binary
+    return settings
 
 
 def get_registry() -> ToolRegistry:
