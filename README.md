@@ -8,7 +8,8 @@ cd ScanGuard
 python3 -m venv .venv
 source .venv/bin/activate
 cp .env.example .env
-python3 -m pip install --force-reinstall -e .
+python3 -m pip install --force-reinstall -e 
+htop .
 ```
 
 Use the single Groq key you already pasted into `.env`.
