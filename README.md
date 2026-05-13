@@ -19,31 +19,15 @@ scanguard findings --project PROJECT_ID
 ```bash
 git clone https://github.com/harkarshaurya-eng/ScanGuard.git
 cd ScanGuard
-
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -e .
-
 cp .env.example .env
-nano .env
-```
-
-Add your Groq API key to `.env`:
-
-```env
-GROQ_API_KEY=your_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-SCANGUARD_AUTO_SAFE=false
-```
-
-First run:
-
-```bash
+python3 -m pip install -e .
 scanguard init
 scanguard autopilot --target example.com --scope examples/scope.txt
 ```
+
+Use the single Groq key you already pasted into `.env`.
 
 ## Tools The AI Can Use Independently
 
