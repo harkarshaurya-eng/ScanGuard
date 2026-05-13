@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 
+from scanguard.ai.autopilot import build_offline_autonomous_plan, sanitize_autonomous_plan
 from scanguard.ai.groq_client import GroqClient
 from scanguard.ai.memory import format_recent_messages
 from scanguard.ai.prompts import build_prompt_bundle, render_chat_messages
 from scanguard.ai.safety import classify_user_message
 from scanguard.config import AppSettings
 from scanguard.mcp.registry import ToolRegistry
-from scanguard.mcp.schemas import ToolPlan
+from scanguard.mcp.schemas import AutonomousPlan, AutonomousStep, ToolPlan
 from scanguard.storage.workspace import ProjectWorkspace
 
 
@@ -75,6 +77,71 @@ class ReconAgent:
             output_parts.append(token)
         return "".join(output_parts)
 
+    async def plan_autonomous_recon(
+        self,
+        workspace: ProjectWorkspace,
+        objective: str,
+        *,
+        auto_safe: bool,
+        allow_careful: bool,
+        max_steps: int = 8,
+    ) -> AutonomousPlan:
+        """Produce an ordered recon workflow for one-shot orchestration."""
+        if not self.settings.groq_api_key:
+            return build_offline_autonomous_plan(
+                self.registry,
+                auto_safe=auto_safe,
+                allow_careful=allow_careful,
+                max_steps=max_steps,
+            )
+
+        allowed_tools = []
+        for tool in self.registry.list():
+            if tool.category.value == "active_safe" and not auto_safe:
+                continue
+            if tool.category.value == "active_careful" and not allow_careful:
+                continue
+            allowed_tools.append(
+                {
+                    "name": tool.name,
+                    "category": tool.category.value,
+                    "requires_confirmation": tool.requires_confirmation,
+                    "description": tool.description,
+                }
+            )
+
+        bundle = build_prompt_bundle(
+            workspace,
+            "\n".join(
+                [
+                    "Create a safe autonomous reconnaissance plan.",
+                    f"Objective: {objective}",
+                    f"Maximum steps: {max_steps}",
+                    f"Auto-safe enabled: {str(auto_safe).lower()}",
+                    f"Allow active_careful tools: {str(allow_careful).lower()}",
+                    "Choose only from this tool catalog:",
+                    json.dumps(allowed_tools, indent=2),
+                    "Return JSON only with this shape:",
+                    '{"strategy":"...","steps":[{"tool_name":"...","reason":"...","target":"..."}],"report_formats":["markdown","html","json"]}',
+                    "Rules:",
+                    "- prefer passive tools first, then active_safe tools",
+                    "- include active_careful tools only when explicitly allowed",
+                    "- do not repeat tools",
+                    "- keep the plan focused and practical",
+                    "- never include exploitation, brute force, credential attacks, or denial of service",
+                ]
+            ),
+        )
+        payload = await self.groq.plan_structured(render_chat_messages(bundle))
+        plan = AutonomousPlan.model_validate(payload)
+        return sanitize_autonomous_plan(
+            self.registry,
+            plan,
+            auto_safe=auto_safe,
+            allow_careful=allow_careful,
+            max_steps=max_steps,
+        )
+
     def _offline_answer(self, workspace: ProjectWorkspace, message: str) -> str:
         findings = workspace.database.fetch_findings(workspace.project.id)
         tool_runs = workspace.database.fetch_tool_runs(workspace.project.id)
@@ -89,5 +156,6 @@ class ReconAgent:
             "Groq is not configured, so I am answering in offline mode. I can still help with safe tool planning, "
             "scope checks, findings review, and report generation from the stored evidence."
         )
+
 
 

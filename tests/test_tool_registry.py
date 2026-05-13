@@ -10,6 +10,10 @@ def test_tool_registry_contains_expected_tools() -> None:
     assert "nmap_basic" in names
     assert "httpx_probe" in names
     assert "whois_lookup" in names
+    assert "curl_headers" in names
+    assert "dnsrecon_standard" in names
+    assert "assetfinder_passive" in names
+    assert "naabu_top_ports" in names
     assert len(names) == len(tools)
     assert registry.get("httpx_probe").requires_confirmation is True
 

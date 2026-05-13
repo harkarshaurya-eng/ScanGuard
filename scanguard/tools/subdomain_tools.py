@@ -17,6 +17,11 @@ def _amass_passive_command(input_data: ToolExecutionInput) -> list[str]:
     return ["amass", "enum", "-passive", "-norecursive", "-d", input_data.target]
 
 
+def _assetfinder_command(input_data: ToolExecutionInput) -> list[str]:
+    no_extra_args(input_data)
+    return ["assetfinder", "--subs-only", input_data.target]
+
+
 def build_subdomain_tools() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -43,6 +48,19 @@ def build_subdomain_tools() -> list[ToolDefinition]:
             parser=lambda stdout, target: parse_lines_as_assets(stdout, target, "subdomain", "amass_passive"),
             timeout_seconds=300,
             rate_limit_seconds=45,
+            allowed_target_types=[TargetType.domain],
+        ),
+        ToolDefinition(
+            name="assetfinder_passive",
+            description="Passive subdomain discovery with assetfinder.",
+            category=ToolCategory.passive,
+            binary="assetfinder",
+            input_schema={"target": "domain"},
+            requires_confirmation=False,
+            command_builder=_assetfinder_command,
+            parser=lambda stdout, target: parse_lines_as_assets(stdout, target, "subdomain", "assetfinder_passive"),
+            timeout_seconds=180,
+            rate_limit_seconds=30,
             allowed_target_types=[TargetType.domain],
         ),
     ]

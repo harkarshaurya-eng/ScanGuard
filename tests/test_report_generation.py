@@ -45,9 +45,12 @@ def test_report_generation_outputs_all_formats(tmp_path: Path) -> None:
     md = generator.generate(workspace, "markdown")
     html = generator.generate(workspace, "html")
     js = generator.generate(workspace, "json")
+    recon = generator.generate_recon_summary(workspace)
     assert md.path.exists()
     assert html.path.exists()
     assert js.path.exists()
+    assert recon.exists()
     assert "Admin interface exposed" in md.path.read_text(encoding="utf-8")
+    assert "Admin interface exposed" in recon.read_text(encoding="utf-8")
 
 

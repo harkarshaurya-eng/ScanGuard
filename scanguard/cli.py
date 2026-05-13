@@ -3,26 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import typer
 from loguru import logger
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from scanguard.ai.agent import ReconAgent
 from scanguard.config import AppSettings, ensure_env_file, ensure_user_prompt
-from scanguard.constants import APP_NAME, BASELINE_TOOLS
+from scanguard.constants import APP_NAME
 from scanguard.logging_config import configure_logging
 from scanguard.mcp.executor import ToolExecutionError, ToolExecutor
 from scanguard.mcp.registry import ToolRegistry
 from scanguard.mcp.schemas import ToolExecutionInput
 from scanguard.reports.report_generator import ReportGenerator
+from scanguard.storage.models import ToolRunRecord
 from scanguard.storage.workspace import ProjectWorkspace, create_workspace, discover_projects, load_workspace
-from scanguard.utils.files import ensure_dir
+from scanguard.utils.files import ensure_dir, write_json
 from scanguard.utils.validators import ScopeAuthorizer, normalize_target
 
 app = typer.Typer(help="AI-assisted reconnaissance for authorized testing on Kali Linux.")
@@ -71,17 +71,6 @@ def show_project_summary(workspace: ProjectWorkspace) -> None:
     console.print(Panel(body, title="Project Summary", border_style="green"))
 
 
-def show_tools(registry: ToolRegistry) -> None:
-    table = Table(title="Registered MCP-Style Tools")
-    table.add_column("Name")
-    table.add_column("Category")
-    table.add_column("Confirmation")
-    table.add_column("Binary")
-    for tool in registry.list():
-        table.add_row(tool.name, tool.category.value, "yes" if tool.requires_confirmation else "no", tool.binary)
-    console.print(table)
-
-
 def show_findings_table(workspace: ProjectWorkspace) -> None:
     findings = workspace.database.fetch_findings(workspace.project.id)
     table = Table(title=f"Findings for {workspace.project.id}")
@@ -104,7 +93,7 @@ def execute_tool(
     auto_safe: bool,
     confirmed: bool,
     wordlist: str | None = None,
-) -> None:
+) -> ToolRunRecord:
     tool = registry.get(tool_name)
     record = executor.execute(
         workspace,
@@ -124,6 +113,7 @@ def execute_tool(
             border_style="blue",
         )
     )
+    return record
 
 
 def validate_target_and_scope(target: str, scope_file: Path) -> tuple[str, ScopeAuthorizer]:
@@ -132,117 +122,6 @@ def validate_target_and_scope(target: str, scope_file: Path) -> tuple[str, Scope
     if not authorizer.is_authorized(target):
         raise typer.BadParameter(f"Target {normalized_target} is not authorized by scope file {scope_file}.")
     return normalized_target, authorizer
-
-
-async def run_agent_chat(workspace: ProjectWorkspace, settings: AppSettings, auto_safe: bool) -> None:
-    registry = get_registry()
-    executor = ToolExecutor()
-    agent = ReconAgent(settings, registry)
-    workspace.database.add_chat_message(workspace.project.id, "system", "Interactive chat session started.")
-    show_project_summary(workspace)
-
-    try:
-        while True:
-            user_input = Prompt.ask("[bold cyan]scanguard[/bold cyan]")
-            if not user_input.strip():
-                continue
-            if user_input == "/exit":
-                break
-            if user_input == "/help":
-                console.print(
-                    Markdown(
-                        "\n".join(
-                            [
-                                "- `/help` show chat commands",
-                                "- `/tools` list registered tools",
-                                "- `/scope` show normalized scope rules",
-                                "- `/findings` list flagged findings",
-                                "- `/report` generate a Markdown report",
-                                "- `/raw TOOL_RUN_ID` print raw stdout for a tool run",
-                                "- `/explain FINDING_ID` explain a finding",
-                                "- `/clear` clear the screen",
-                                "- `/exit` leave chat",
-                            ]
-                        )
-                    )
-                )
-                continue
-            if user_input == "/tools":
-                show_tools(registry)
-                continue
-            if user_input == "/findings":
-                show_findings_table(workspace)
-                continue
-            if user_input == "/scope":
-                authorizer = ScopeAuthorizer.from_file(Path(workspace.project.scope_file))
-                console.print(Panel("\n".join(authorizer.explain()), title="Authorized Scope"))
-                continue
-            if user_input == "/report":
-                artifact = ReportGenerator().generate(workspace, "markdown")
-                console.print(Panel(f"Report written to {artifact.path}", title="Report"))
-                continue
-            if user_input == "/clear":
-                console.clear()
-                continue
-            if user_input.startswith("/raw "):
-                _, tool_run_id = user_input.split(maxsplit=1)
-                tool_run = workspace.database.fetch_tool_run(tool_run_id)
-                console.print(Path(tool_run.stdout_path).read_text(encoding="utf-8"))
-                continue
-            if user_input.startswith("/explain "):
-                _, finding_id = user_input.split(maxsplit=1)
-                finding = workspace.database.fetch_finding(finding_id)
-                explanation = (
-                    f"{finding.title} on {finding.affected_asset} was flagged by {finding.source_tool}. "
-                    f"Severity is {finding.severity}, confidence is {finding.confidence}. "
-                    f"Recommendation: {finding.recommendation}"
-                )
-                console.print(Panel(explanation, title=f"Finding {finding_id}"))
-                continue
-
-            workspace.database.add_chat_message(workspace.project.id, "user", user_input)
-            reply = await agent.plan_message(workspace, user_input)
-            if reply.plan.response_type == "run_tool_request" and reply.plan.tool_name:
-                console.print(reply.message)
-                tool = registry.get(reply.plan.tool_name)
-                confirmed = auto_safe if tool.category.value == "active_safe" else False
-                if not confirmed:
-                    confirmed = Confirm.ask(f"Run {tool.name} against {workspace.project.target}?")
-                if confirmed:
-                    try:
-                        execute_tool(
-                            workspace,
-                            registry,
-                            executor,
-                            tool.name,
-                            workspace.project.target,
-                            auto_safe=auto_safe,
-                            confirmed=confirmed,
-                        )
-                        assistant_message = f"Executed {tool.name} successfully."
-                    except (ToolExecutionError, FileNotFoundError, PermissionError, ValueError) as exc:
-                        assistant_message = f"Tool execution failed: {exc}"
-                else:
-                    assistant_message = f"Skipped {tool.name}."
-                console.print(Panel(assistant_message, title="Assistant"))
-                workspace.database.add_chat_message(workspace.project.id, "assistant", assistant_message)
-                continue
-
-            if reply.plan.response_type == "generate_report":
-                artifact = ReportGenerator().generate(workspace, "markdown")
-                assistant_message = f"Generated report at {artifact.path}"
-                console.print(Panel(assistant_message, title="Assistant"))
-                workspace.database.add_chat_message(workspace.project.id, "assistant", assistant_message)
-                continue
-
-            if settings.groq_api_key and reply.plan.response_type == "answer_question":
-                answer = await agent.stream_answer(workspace, user_input)
-            else:
-                answer = reply.message
-            console.print(Panel(answer, title="Assistant"))
-            workspace.database.add_chat_message(workspace.project.id, "assistant", answer)
-    finally:
-        await agent.close()
 
 
 @app.command()
@@ -268,89 +147,168 @@ def init() -> None:
 
 
 @app.command()
-def start(
+def autopilot(
     target: str = typer.Option(..., "--target"),
     scope: Path = typer.Option(..., "--scope"),
-    auto_safe: bool = typer.Option(False, "--auto-safe", help="Automatically allow active_safe tools."),
+    objective: str = typer.Option(
+        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
+        "--objective",
+        help="Operator intent provided to the AI planner.",
+    ),
+    auto_safe: bool = typer.Option(
+        True,
+        "--auto-safe/--no-auto-safe",
+        help="Allow active_safe tools to run automatically during autopilot.",
+    ),
+    allow_careful: bool = typer.Option(
+        False,
+        "--allow-careful",
+        help="Explicitly allow active_careful tools in the autonomous workflow.",
+    ),
+    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
+    report_format: list[str] = typer.Option(
+        ["markdown", "html", "json"],
+        "--report-format",
+        help="Report formats to generate at the end. Repeat the option to limit formats.",
+    ),
 ) -> None:
-    """Validate scope, create a workspace, run baseline recon, and start chat."""
+    """Run a one-shot AI-planned recon workflow and generate reports plus target_name.recon.txt."""
     settings = get_settings()
     configure_logging(settings.log_level)
     normalized_target, authorizer = validate_target_and_scope(target, scope)
-    console.print(Panel(f"Target `{normalized_target}` is authorized.\nScope rules:\n" + "\n".join(authorizer.explain()), title="Scope Validation"))
+    render_banner()
+    console.print(
+        Panel(
+            f"Target `{normalized_target}` is authorized.\nScope rules:\n" + "\n".join(authorizer.explain()),
+            title="Scope Validation",
+        )
+    )
 
     workspace = create_workspace(settings.workspace_root, normalized_target, scope, settings.sqlite_busy_timeout_ms)
-    registry = get_registry()
-    executor = ToolExecutor()
-    workspace.database.update_project_status(workspace.project.id, "running")
-    workspace.project.status = "running"
-    render_banner()
+    workspace.database.update_project_status(workspace.project.id, "autopilot-running")
+    workspace.project.status = "autopilot-running"
     show_project_summary(workspace)
 
-    should_run_baseline = auto_safe or Confirm.ask("Run the safe baseline recon plan now?")
-    if should_run_baseline:
-        for tool_name in BASELINE_TOOLS:
-            try:
-                execute_tool(
-                    workspace,
-                    registry,
-                    executor,
-                    tool_name,
-                    normalized_target,
-                    auto_safe=auto_safe,
-                    confirmed=True,
-                )
-            except (ToolExecutionError, FileNotFoundError, PermissionError, ValueError) as exc:
-                logger.warning("Baseline tool {} failed: {}", tool_name, exc)
-                console.print(Panel(f"{tool_name} skipped or failed: {exc}", title="Baseline Warning", border_style="yellow"))
-    workspace.database.update_project_status(workspace.project.id, "baseline-complete")
-    workspace.project.status = "baseline-complete"
-    asyncio.run(run_agent_chat(workspace, settings, auto_safe))
-
-
-@app.command("chat")
-def chat_project(
-    project: str = typer.Option(..., "--project"),
-    auto_safe: bool = typer.Option(False, "--auto-safe"),
-) -> None:
-    """Resume interactive AI chat for an existing project."""
-    settings = get_settings()
-    configure_logging(settings.log_level)
-    workspace = resolve_workspace(settings, project)
-    render_banner()
-    asyncio.run(run_agent_chat(workspace, settings, auto_safe))
-
-
-@app.command("run-tool")
-def run_tool_command(
-    tool_name: str = typer.Argument(...),
-    target: str = typer.Option(..., "--target"),
-    project: str | None = typer.Option(None, "--project"),
-    scope: Path | None = typer.Option(None, "--scope"),
-    auto_safe: bool = typer.Option(False, "--auto-safe"),
-    wordlist: str | None = typer.Option(None, "--wordlist"),
-) -> None:
-    """Run a registered tool manually and persist its outputs."""
-    settings = get_settings()
-    configure_logging(settings.log_level)
     registry = get_registry()
     executor = ToolExecutor()
+    agent = ReconAgent(settings, registry)
 
-    if project:
-        workspace = resolve_workspace(settings, project)
-        validate_target_and_scope(target, Path(workspace.project.scope_file))
-    else:
-        if scope is None:
-            raise typer.BadParameter("--scope is required when --project is not provided.")
-        normalized_target, _ = validate_target_and_scope(target, scope)
-        workspace = create_workspace(settings.workspace_root, normalized_target, scope, settings.sqlite_busy_timeout_ms)
-        target = normalized_target
+    try:
+        plan = asyncio.run(
+            agent.plan_autonomous_recon(
+                workspace,
+                objective,
+                auto_safe=auto_safe,
+                allow_careful=allow_careful,
+                max_steps=max_steps,
+            )
+        )
+    finally:
+        asyncio.run(agent.close())
 
-    tool = registry.get(tool_name)
-    confirmed = auto_safe if tool.category.value == "active_safe" else False
-    if not confirmed and tool.requires_confirmation:
-        confirmed = Confirm.ask(f"Run {tool.name} against {target}?")
-    execute_tool(workspace, registry, executor, tool_name, target, auto_safe=auto_safe, confirmed=confirmed, wordlist=wordlist)
+    plan_payload = plan.model_dump(mode="json")
+    write_json(workspace.metadata_dir / "autopilot-plan.json", plan_payload)
+    workspace.database.add_chat_message(workspace.project.id, "system", f"Autopilot objective: {objective}")
+    workspace.database.add_chat_message(workspace.project.id, "assistant", f"Autopilot strategy: {plan.strategy}")
+
+    plan_table = Table(title="Autopilot Plan")
+    plan_table.add_column("#")
+    plan_table.add_column("Tool")
+    plan_table.add_column("Reason")
+    for index, step in enumerate(plan.steps, start=1):
+        plan_table.add_row(str(index), step.tool_name, step.reason)
+    console.print(Panel(plan.strategy, title="AI Strategy", border_style="magenta"))
+    console.print(plan_table)
+
+    for index, step in enumerate(plan.steps, start=1):
+        tool = registry.get(step.tool_name)
+        step_target = step.target or normalized_target
+        if not authorizer.is_authorized(step_target):
+            console.print(
+                Panel(
+                    f"Skipped step {index}: target `{step_target}` is outside authorized scope.",
+                    title="Autopilot Skip",
+                    border_style="yellow",
+                )
+            )
+            continue
+        confirmed = tool.category.value == "passive"
+        if tool.category.value == "active_safe":
+            confirmed = auto_safe
+        elif tool.category.value == "active_careful":
+            confirmed = allow_careful
+
+        if tool.requires_confirmation and not confirmed:
+            console.print(
+                Panel(
+                    f"Skipped `{tool.name}` because its safety category requires an explicit opt-in for autopilot.",
+                    title="Autopilot Skip",
+                    border_style="yellow",
+                )
+            )
+            continue
+
+        try:
+            execute_tool(
+                workspace,
+                registry,
+                executor,
+                tool.name,
+                step_target,
+                auto_safe=auto_safe,
+                confirmed=confirmed,
+            )
+        except (ToolExecutionError, FileNotFoundError, PermissionError, ValueError) as exc:
+            logger.warning("Autopilot step {} ({}) failed: {}", index, tool.name, exc)
+            console.print(
+                Panel(
+                    f"Step {index} `{tool.name}` failed or was unavailable: {exc}",
+                    title="Autopilot Warning",
+                    border_style="yellow",
+                )
+            )
+
+    normalized_formats: list[str] = []
+    for fmt in report_format:
+        if fmt not in {"markdown", "html", "json"}:
+            raise typer.BadParameter(f"Unsupported report format: {fmt}")
+        if fmt not in normalized_formats:
+            normalized_formats.append(fmt)
+    if not normalized_formats:
+        normalized_formats = plan.report_formats
+
+    generated_reports: list[str] = []
+    for fmt in normalized_formats:
+        artifact = ReportGenerator().generate(workspace, fmt)
+        generated_reports.append(str(artifact.path))
+    recon_summary_path = ReportGenerator().generate_recon_summary(workspace)
+    generated_reports.append(str(recon_summary_path))
+
+    summary_payload = {
+        "objective": objective,
+        "strategy": plan.strategy,
+        "executed_steps": [step.model_dump(mode="json") for step in plan.steps],
+        "report_paths": generated_reports,
+        "report_formats": normalized_formats,
+        "recon_summary_path": str(recon_summary_path),
+    }
+    write_json(workspace.metadata_dir / "autopilot-summary.json", summary_payload)
+    workspace.database.update_project_status(workspace.project.id, "autopilot-complete")
+    workspace.project.status = "autopilot-complete"
+    console.print(
+        Panel(
+            "\n".join(
+                [
+                    f"Project ID: {workspace.project.id}",
+                    f"Workspace: {workspace.root}",
+                    f"Recon Summary: {recon_summary_path}",
+                    f"Reports: {json.dumps(generated_reports, indent=2)}",
+                ]
+            ),
+            title="Autopilot Complete",
+            border_style="green",
+        )
+    )
 
 
 @app.command()

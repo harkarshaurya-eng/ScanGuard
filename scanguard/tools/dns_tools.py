@@ -22,6 +22,11 @@ def _nslookup_command(input_data: ToolExecutionInput) -> list[str]:
     return ["nslookup", input_data.target]
 
 
+def _dnsrecon_command(input_data: ToolExecutionInput) -> list[str]:
+    no_extra_args(input_data)
+    return ["dnsrecon", "-d", input_data.target, "-t", "std"]
+
+
 def build_dns_tools() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -62,6 +67,19 @@ def build_dns_tools() -> list[ToolDefinition]:
             timeout_seconds=60,
             rate_limit_seconds=10,
             allowed_target_types=[TargetType.domain, TargetType.ip],
+        ),
+        ToolDefinition(
+            name="dnsrecon_standard",
+            description="Perform standard DNS enumeration with dnsrecon.",
+            category=ToolCategory.passive,
+            binary="dnsrecon",
+            input_schema={"target": "domain"},
+            requires_confirmation=False,
+            command_builder=_dnsrecon_command,
+            parser=lambda stdout, target: parse_lines_as_assets(stdout, target, "dnsrecon_line", "dnsrecon_standard"),
+            timeout_seconds=180,
+            rate_limit_seconds=20,
+            allowed_target_types=[TargetType.domain],
         ),
     ]
 

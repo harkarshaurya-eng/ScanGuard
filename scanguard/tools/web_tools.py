@@ -7,6 +7,7 @@ from pathlib import Path
 from scanguard.constants import DEFAULT_SMALL_WORDLIST, SAFE_NUCLEI_EXCLUDE_TAGS, SAFE_NUCLEI_SEVERITIES
 from scanguard.mcp.schemas import TargetType, ToolCategory, ToolDefinition, ToolExecutionInput
 from scanguard.parsers.generic_parser import detect_interesting_paths, parse_lines_as_assets
+from scanguard.parsers.headers_parser import parse_http_headers_output
 from scanguard.parsers.httpx_parser import parse_httpx_output
 from scanguard.parsers.nikto_parser import parse_nikto_output
 from scanguard.parsers.nuclei_parser import parse_nuclei_output
@@ -32,6 +33,21 @@ def _httpx_command(input_data: ToolExecutionInput) -> list[str]:
 def _wafw00f_command(input_data: ToolExecutionInput) -> list[str]:
     no_extra_args(input_data)
     return ["wafw00f", as_url(input_data.target)]
+
+
+def _curl_headers_command(input_data: ToolExecutionInput) -> list[str]:
+    no_extra_args(input_data)
+    return [
+        "curl",
+        "-sS",
+        "-I",
+        "-L",
+        "--max-redirs",
+        "3",
+        "--connect-timeout",
+        "10",
+        as_url(input_data.target),
+    ]
 
 
 def _whatweb_command(input_data: ToolExecutionInput) -> list[str]:
@@ -171,6 +187,19 @@ def build_web_tools() -> list[ToolDefinition]:
             parser=_waf_parser,
             timeout_seconds=120,
             rate_limit_seconds=20,
+            allowed_target_types=[TargetType.domain, TargetType.url],
+        ),
+        ToolDefinition(
+            name="curl_headers",
+            description="Collect HTTP response headers and identify missing hardening headers.",
+            category=ToolCategory.active_safe,
+            binary="curl",
+            input_schema={"target": "url|domain"},
+            requires_confirmation=True,
+            command_builder=_curl_headers_command,
+            parser=parse_http_headers_output,
+            timeout_seconds=120,
+            rate_limit_seconds=15,
             allowed_target_types=[TargetType.domain, TargetType.url],
         ),
         ToolDefinition(

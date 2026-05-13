@@ -69,3 +69,19 @@ class ToolPlan(BaseModel):
     answer: str | None = None
 
 
+class AutonomousStep(BaseModel):
+    """Single step in an autonomous recon workflow."""
+
+    tool_name: str
+    reason: str
+    target: str | None = None
+
+
+class AutonomousPlan(BaseModel):
+    """Ordered autonomous recon workflow."""
+
+    strategy: str
+    steps: list[AutonomousStep] = Field(default_factory=list)
+    report_formats: list[str] = Field(default_factory=lambda: ["markdown", "html", "json"])
+
+

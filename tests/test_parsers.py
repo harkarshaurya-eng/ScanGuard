@@ -1,4 +1,6 @@
+from scanguard.parsers.headers_parser import parse_http_headers_output
 from scanguard.parsers.httpx_parser import parse_httpx_output
+from scanguard.parsers.naabu_parser import parse_naabu_output
 from scanguard.parsers.nikto_parser import parse_nikto_output
 from scanguard.parsers.nmap_parser import parse_nmap_xml
 from scanguard.parsers.nuclei_parser import parse_nuclei_output
@@ -36,5 +38,19 @@ def test_nikto_parser_flags_directory_listing() -> None:
     stdout = "+ /icons/: Directory indexing found.\n"
     parsed = parse_nikto_output(stdout, "https://example.com")
     assert parsed.findings[0].title == "Directory listing exposed"
+
+
+def test_headers_and_naabu_parsers_generate_findings() -> None:
+    headers_stdout = """
+HTTP/2 200
+server: nginx
+x-powered-by: PHP/8.2
+content-type: text/html
+"""
+    naabu_stdout = '{"host":"example.com","port":21}\n{"host":"example.com","port":443}\n'
+    header_parsed = parse_http_headers_output(headers_stdout, "https://example.com")
+    naabu_parsed = parse_naabu_output(naabu_stdout, "example.com")
+    assert any(finding.title == "Missing recommended security headers" for finding in header_parsed.findings)
+    assert any(finding.title == "FTP service exposed" for finding in naabu_parsed.findings)
 
 
