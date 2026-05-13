@@ -5,7 +5,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from scanguard.cli import app, resolve_scope_file
+from scanguard.cli import app, resolve_scope_file, scan_app, should_route_to_scan_app
 
 runner = CliRunner()
 
@@ -47,6 +47,32 @@ def test_root_command_allows_missing_scope_option(monkeypatch: Any, tmp_path: Pa
     assert captured["scope"] is None
 
 
+def test_direct_scan_app_accepts_target_option(monkeypatch: Any, tmp_path: Path) -> None:
+    scope_file = tmp_path / "scope.txt"
+    scope_file.write_text("example.com\n", encoding="utf-8")
+    captured: dict[str, Any] = {}
+
+    def fake_run_autopilot(
+        *,
+        target: str,
+        scope: Path | None,
+        objective: str,
+        auto_safe: bool,
+        allow_careful: bool,
+        max_steps: int,
+        report_format: list[str],
+    ) -> None:
+        captured.update({"target": target, "scope": scope})
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("scanguard.cli._run_autopilot", fake_run_autopilot)
+
+    result = runner.invoke(scan_app, ["--target", "example.com", "--scope", "scope.txt"])
+
+    assert result.exit_code == 0
+    assert captured == {"target": "example.com", "scope": Path("scope.txt")}
+
+
 def test_resolve_scope_file_uses_default_file(monkeypatch: Any, tmp_path: Path) -> None:
     scope_file = tmp_path / "scope.txt"
     scope_file.write_text("example.com\n", encoding="utf-8")
@@ -61,3 +87,10 @@ def test_resolve_scope_file_requires_path_if_default_is_missing(monkeypatch: Any
 
     with pytest.raises(typer.BadParameter, match="No scope file provided"):
         resolve_scope_file(None)
+
+
+def test_should_route_to_scan_app_detects_direct_scan_invocations() -> None:
+    assert should_route_to_scan_app(["--target", "example.com"])
+    assert should_route_to_scan_app(["example.com"])
+    assert not should_route_to_scan_app(["report", "--project", "abc123"])
+    assert not should_route_to_scan_app(["--help"])

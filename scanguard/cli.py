@@ -31,8 +31,14 @@ app = typer.Typer(
     invoke_without_command=True,
     no_args_is_help=True,
 )
+scan_app = typer.Typer(
+    add_completion=False,
+    invoke_without_command=True,
+    no_args_is_help=True,
+)
 console = Console()
 DEFAULT_SCOPE_FILE = Path("scope.txt")
+DIRECT_SCAN_SUBCOMMANDS = {"report", "projects", "findings", "init", "autopilot"}
 
 
 def get_settings() -> AppSettings:
@@ -141,6 +147,18 @@ def resolve_scope_file(scope: Path | None) -> Path:
     if default_scope.exists():
         return default_scope
     raise typer.BadParameter("No scope file provided. Add ./scope.txt or pass --scope PATH.")
+
+
+def should_route_to_scan_app(argv: list[str]) -> bool:
+    """Route explicit scan invocations away from the subcommand group parser."""
+    if not argv:
+        return False
+    if any(arg == "--target" or arg.startswith("--target=") for arg in argv):
+        return True
+    first = argv[0]
+    if first.startswith("-"):
+        return False
+    return first not in DIRECT_SCAN_SUBCOMMANDS
 
 
 def _run_autopilot(
@@ -337,6 +355,48 @@ def main(
         return
     if target is None:
         return
+    _run_autopilot(
+        target=target,
+        scope=scope,
+        objective=objective,
+        auto_safe=auto_safe,
+        allow_careful=allow_careful,
+        max_steps=max_steps,
+        report_format=report_format,
+    )
+
+
+@scan_app.callback()
+def direct_scan(
+    target: str = typer.Option(..., "--target", help="Authorized target to scan."),
+    scope: Path | None = typer.Option(
+        None,
+        "--scope",
+        help="Path to the in-scope targets file. Defaults to ./scope.txt if present.",
+    ),
+    objective: str = typer.Option(
+        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
+        "--objective",
+        help="Operator intent provided to the AI planner.",
+    ),
+    auto_safe: bool = typer.Option(
+        True,
+        "--auto-safe/--no-auto-safe",
+        help="Allow active_safe tools to run automatically.",
+    ),
+    allow_careful: bool = typer.Option(
+        False,
+        "--allow-careful",
+        help="Explicitly allow active_careful tools in the autonomous workflow.",
+    ),
+    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
+    report_format: list[str] = typer.Option(
+        ["markdown", "html", "json"],
+        "--report-format",
+        help="Report formats to generate at the end. Repeat the option to limit formats.",
+    ),
+) -> None:
+    """Run the single-command autonomous recon workflow."""
     _run_autopilot(
         target=target,
         scope=scope,

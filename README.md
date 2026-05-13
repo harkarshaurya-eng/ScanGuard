@@ -35,6 +35,12 @@ example.com
 scanguard --target example.com
 ```
 
+If your shell still uses an older installed launcher after a pull, refresh it with:
+
+```bash
+python3 -m pip install --force-reinstall -e .
+```
+
 ScanGuard automatically reads `./scope.txt`, validates the target, runs AI-planned recon, and writes reports plus:
 
 ```text
