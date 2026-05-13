@@ -5,7 +5,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from scanguard.cli import app, resolve_scope_file, scan_app, should_route_to_scan_app
+from scanguard.cli import app, resolve_scope_file
+from scanguard.main import run_direct_scan_cli, should_forward_to_typer
 
 runner = CliRunner()
 
@@ -47,12 +48,12 @@ def test_root_command_allows_missing_scope_option(monkeypatch: Any, tmp_path: Pa
     assert captured["scope"] is None
 
 
-def test_direct_scan_app_accepts_target_option(monkeypatch: Any, tmp_path: Path) -> None:
+def test_run_direct_scan_cli_accepts_target_option(monkeypatch: Any, tmp_path: Path) -> None:
     scope_file = tmp_path / "scope.txt"
     scope_file.write_text("example.com\n", encoding="utf-8")
     captured: dict[str, Any] = {}
 
-    def fake_run_autopilot(
+    def fake_run_scan(
         *,
         target: str,
         scope: Path | None,
@@ -65,11 +66,9 @@ def test_direct_scan_app_accepts_target_option(monkeypatch: Any, tmp_path: Path)
         captured.update({"target": target, "scope": scope})
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("scanguard.cli._run_autopilot", fake_run_autopilot)
+    monkeypatch.setattr("scanguard.main.run_scan", fake_run_scan)
 
-    result = runner.invoke(scan_app, ["--target", "example.com", "--scope", "scope.txt"])
-
-    assert result.exit_code == 0
+    run_direct_scan_cli(["--target", "example.com", "--scope", "scope.txt"])
     assert captured == {"target": "example.com", "scope": Path("scope.txt")}
 
 
@@ -89,8 +88,9 @@ def test_resolve_scope_file_requires_path_if_default_is_missing(monkeypatch: Any
         resolve_scope_file(None)
 
 
-def test_should_route_to_scan_app_detects_direct_scan_invocations() -> None:
-    assert should_route_to_scan_app(["--target", "example.com"])
-    assert should_route_to_scan_app(["example.com"])
-    assert not should_route_to_scan_app(["report", "--project", "abc123"])
-    assert not should_route_to_scan_app(["--help"])
+def test_should_forward_to_typer_detects_management_commands() -> None:
+    assert should_forward_to_typer(["report", "--project", "abc123"])
+    assert should_forward_to_typer(["projects"])
+    assert should_forward_to_typer(["--show-completion"])
+    assert not should_forward_to_typer(["--target", "example.com"])
+    assert not should_forward_to_typer(["example.com"])

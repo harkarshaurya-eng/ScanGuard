@@ -15,7 +15,8 @@ def configure_logging(level: str = DEFAULT_LOG_LEVEL, log_file: Path | None = No
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     sink_path = log_file or (LOG_DIR / "scanguard.log")
     logger.remove()
-    logger.add(sys.stderr, level=level, colorize=True)
+    console_level = "DEBUG" if level.upper() == "DEBUG" else "ERROR"
+    logger.add(sys.stderr, level=console_level, colorize=True)
     logger.add(
         sink_path,
         level=level,

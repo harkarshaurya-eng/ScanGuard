@@ -31,14 +31,8 @@ app = typer.Typer(
     invoke_without_command=True,
     no_args_is_help=True,
 )
-scan_app = typer.Typer(
-    add_completion=False,
-    invoke_without_command=True,
-    no_args_is_help=True,
-)
 console = Console()
 DEFAULT_SCOPE_FILE = Path("scope.txt")
-DIRECT_SCAN_SUBCOMMANDS = {"report", "projects", "findings", "init", "autopilot"}
 
 
 def get_settings() -> AppSettings:
@@ -60,30 +54,22 @@ def resolve_workspace(settings: AppSettings, project_id: str) -> ProjectWorkspac
 
 
 def render_banner() -> None:
-    banner = f"""
-  ____                  _____                     _       _   _
- / ___|  ___ __ _ _ __ |  ___|__  _ __ ___  _   _| | __ _| |_(_) ___  _ __
- \\___ \\ / __/ _` | '_ \\| |_ / _ \\| '__/ _ \\| | | | |/ _` | __| |/ _ \\| '_ \\
-  ___) | (_| (_| | | | |  _| (_) | | | (_) | |_| | | (_| | |_| | (_) | | | |
- |____/ \\___\\__,_|_| |_|_|  \\___/|_|  \\___/ \\__,_|_|\\__,_|\\__|_|\\___/|_| |_|
-    """.rstrip("\n")
-    console.print(Panel.fit(banner, title=APP_NAME, border_style="cyan"))
+    console.rule(f"[bold cyan]{APP_NAME}[/bold cyan]")
 
 
 def show_project_summary(workspace: ProjectWorkspace) -> None:
     findings = workspace.database.fetch_findings(workspace.project.id)
     tool_runs = workspace.database.fetch_tool_runs(workspace.project.id)
-    body = "\n".join(
+    body = " | ".join(
         [
-            f"Project ID: {workspace.project.id}",
-            f"Target: {workspace.project.target}",
-            f"Scope: {workspace.project.scope_file}",
-            f"Tool runs: {len(tool_runs)}",
-            f"Findings: {len(findings)}",
-            f"Workspace: {workspace.root}",
+            f"project={workspace.project.id}",
+            f"target={workspace.project.target}",
+            f"scope={workspace.project.scope_file}",
+            f"tool_runs={len(tool_runs)}",
+            f"findings={len(findings)}",
         ]
     )
-    console.print(Panel(body, title="Project Summary", border_style="green"))
+    console.print(f"[green]{body}[/green]")
 
 
 def show_findings_table(workspace: ProjectWorkspace) -> None:
@@ -122,11 +108,10 @@ def execute_tool(
         auto_safe=auto_safe,
     )
     console.print(
-        Panel(
-            f"Tool: {record.tool_name}\nExit code: {record.exit_code}\nStdout: {record.stdout_path}\nParsed: {record.parsed_json_path}",
-            title="Tool Run Complete",
-            border_style="blue",
-        )
+        "[blue]"
+        f"tool={record.tool_name} exit_code={record.exit_code} "
+        f"stdout={record.stdout_path} parsed={record.parsed_json_path}"
+        "[/blue]"
     )
     return record
 
@@ -149,18 +134,6 @@ def resolve_scope_file(scope: Path | None) -> Path:
     raise typer.BadParameter("No scope file provided. Add ./scope.txt or pass --scope PATH.")
 
 
-def should_route_to_scan_app(argv: list[str]) -> bool:
-    """Route explicit scan invocations away from the subcommand group parser."""
-    if not argv:
-        return False
-    if any(arg == "--target" or arg.startswith("--target=") for arg in argv):
-        return True
-    first = argv[0]
-    if first.startswith("-"):
-        return False
-    return first not in DIRECT_SCAN_SUBCOMMANDS
-
-
 def _run_autopilot(
     *,
     target: str,
@@ -179,12 +152,9 @@ def _run_autopilot(
     resolved_scope = resolve_scope_file(scope)
     normalized_target, authorizer = validate_target_and_scope(target, resolved_scope)
     render_banner()
-    console.print(
-        Panel(
-            f"Target `{normalized_target}` is authorized.\nScope rules:\n" + "\n".join(authorizer.explain()),
-            title="Scope Validation",
-        )
-    )
+    console.print(f"[green]authorized target:[/green] {normalized_target}")
+    console.print(f"[green]scope file:[/green] {resolved_scope}")
+    console.print(f"[green]scope rules:[/green] {', '.join(authorizer.explain())}")
 
     workspace = create_workspace(
         settings.workspace_root,
@@ -224,7 +194,7 @@ def _run_autopilot(
     plan_table.add_column("Reason")
     for index, step in enumerate(plan.steps, start=1):
         plan_table.add_row(str(index), step.tool_name, step.reason)
-    console.print(Panel(plan.strategy, title="AI Strategy", border_style="magenta"))
+    console.print(f"[magenta]strategy:[/magenta] {plan.strategy}")
     console.print(plan_table)
 
     for index, step in enumerate(plan.steps, start=1):
@@ -232,11 +202,7 @@ def _run_autopilot(
         step_target = step.target or normalized_target
         if not authorizer.is_authorized(step_target):
             console.print(
-                Panel(
-                    f"Skipped step {index}: target `{step_target}` is outside authorized scope.",
-                    title="Autopilot Skip",
-                    border_style="yellow",
-                )
+                f"[yellow]skipped step {index}: target `{step_target}` is outside authorized scope.[/yellow]"
             )
             continue
         confirmed = tool.category.value == "passive"
@@ -247,11 +213,7 @@ def _run_autopilot(
 
         if tool.requires_confirmation and not confirmed:
             console.print(
-                Panel(
-                    f"Skipped `{tool.name}` because its safety category requires an explicit opt-in for autopilot.",
-                    title="Autopilot Skip",
-                    border_style="yellow",
-                )
+                f"[yellow]skipped `{tool.name}` because it requires explicit opt-in.[/yellow]"
             )
             continue
 
@@ -267,13 +229,7 @@ def _run_autopilot(
             )
         except (ToolExecutionError, FileNotFoundError, PermissionError, ValueError) as exc:
             logger.warning("Autopilot step {} ({}) failed: {}", index, tool.name, exc)
-            console.print(
-                Panel(
-                    f"Step {index} `{tool.name}` failed or was unavailable: {exc}",
-                    title="Autopilot Warning",
-                    border_style="yellow",
-                )
-            )
+            console.print(f"[yellow]step {index} `{tool.name}` failed: {exc}[/yellow]")
 
     normalized_formats: list[str] = []
     for fmt in report_format:
@@ -303,19 +259,31 @@ def _run_autopilot(
     write_json(workspace.metadata_dir / "autopilot-summary.json", summary_payload)
     workspace.database.update_project_status(workspace.project.id, "autopilot-complete")
     workspace.project.status = "autopilot-complete"
-    console.print(
-        Panel(
-            "\n".join(
-                [
-                    f"Project ID: {workspace.project.id}",
-                    f"Workspace: {workspace.root}",
-                    f"Recon Summary: {recon_summary_path}",
-                    f"Reports: {json.dumps(generated_reports, indent=2)}",
-                ]
-            ),
-            title="Autopilot Complete",
-            border_style="green",
-        )
+    console.print(f"[green]project:[/green] {workspace.project.id}")
+    console.print(f"[green]workspace:[/green] {workspace.root}")
+    console.print(f"[green]recon summary:[/green] {recon_summary_path}")
+    console.print(f"[green]reports:[/green] {json.dumps(generated_reports)}")
+
+
+def run_scan(
+    *,
+    target: str,
+    scope: Path | None,
+    objective: str,
+    auto_safe: bool,
+    allow_careful: bool,
+    max_steps: int,
+    report_format: list[str],
+) -> None:
+    """Public single-command scan entrypoint used by CLI frontends."""
+    _run_autopilot(
+        target=target,
+        scope=scope,
+        objective=objective,
+        auto_safe=auto_safe,
+        allow_careful=allow_careful,
+        max_steps=max_steps,
+        report_format=report_format,
     )
 
 
@@ -355,49 +323,7 @@ def main(
         return
     if target is None:
         return
-    _run_autopilot(
-        target=target,
-        scope=scope,
-        objective=objective,
-        auto_safe=auto_safe,
-        allow_careful=allow_careful,
-        max_steps=max_steps,
-        report_format=report_format,
-    )
-
-
-@scan_app.callback()
-def direct_scan(
-    target: str = typer.Option(..., "--target", help="Authorized target to scan."),
-    scope: Path | None = typer.Option(
-        None,
-        "--scope",
-        help="Path to the in-scope targets file. Defaults to ./scope.txt if present.",
-    ),
-    objective: str = typer.Option(
-        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
-        "--objective",
-        help="Operator intent provided to the AI planner.",
-    ),
-    auto_safe: bool = typer.Option(
-        True,
-        "--auto-safe/--no-auto-safe",
-        help="Allow active_safe tools to run automatically.",
-    ),
-    allow_careful: bool = typer.Option(
-        False,
-        "--allow-careful",
-        help="Explicitly allow active_careful tools in the autonomous workflow.",
-    ),
-    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
-    report_format: list[str] = typer.Option(
-        ["markdown", "html", "json"],
-        "--report-format",
-        help="Report formats to generate at the end. Repeat the option to limit formats.",
-    ),
-) -> None:
-    """Run the single-command autonomous recon workflow."""
-    _run_autopilot(
+    run_scan(
         target=target,
         scope=scope,
         objective=objective,
@@ -461,7 +387,7 @@ def autopilot(
     ),
 ) -> None:
     """Run a one-shot AI-planned recon workflow and generate reports plus target_name.recon.txt."""
-    _run_autopilot(
+    run_scan(
         target=target,
         scope=scope,
         objective=objective,
