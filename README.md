@@ -1,19 +1,5 @@
 # ScanGuard
 
-## CLI Commands
-
-```bash
-scanguard init
-scanguard autopilot --target TARGET --scope SCOPE_FILE
-scanguard autopilot --target TARGET --scope SCOPE_FILE --allow-careful
-scanguard autopilot --target TARGET --scope SCOPE_FILE --objective "Map the external attack surface and generate reports"
-scanguard report --project PROJECT_ID --format markdown
-scanguard report --project PROJECT_ID --format html
-scanguard report --project PROJECT_ID --format json
-scanguard projects
-scanguard findings --project PROJECT_ID
-```
-
 ## Installation Commands
 
 ```bash
@@ -23,15 +9,65 @@ python3 -m venv .venv
 source .venv/bin/activate
 cp .env.example .env
 python3 -m pip install -e .
-scanguard init
-scanguard autopilot --target example.com --scope examples/scope.txt
 ```
 
 Use the single Groq key you already pasted into `.env`.
 
+## Scope File
+
+Add your authorized in-scope items to:
+
+```text
+scope.txt
+```
+
+Example:
+
+```text
+example.com
+*.example.com
+192.168.1.0/24
+```
+
+## Single Recon Command
+
+```bash
+scanguard --target example.com
+```
+
+ScanGuard automatically reads `./scope.txt`, validates the target, runs AI-planned recon, and writes reports plus:
+
+```text
+target_name.recon.txt
+```
+
+Example:
+
+```text
+example.com.recon.txt
+```
+
+## Optional Variants
+
+```bash
+scanguard --target example.com --scope myscope.txt
+scanguard --target example.com --allow-careful
+scanguard --target example.com --objective "Map the external attack surface and generate reports"
+```
+
+## Other Commands
+
+```bash
+scanguard report --project PROJECT_ID --format markdown
+scanguard report --project PROJECT_ID --format html
+scanguard report --project PROJECT_ID --format json
+scanguard projects
+scanguard findings --project PROJECT_ID
+```
+
 ## Tools The AI Can Use Independently
 
-### Autonomous By Default In `scanguard autopilot`
+### Autonomous By Default In `scanguard`
 
 Passive:
 
@@ -64,33 +100,3 @@ Active careful:
 - `gobuster_dirs`
 - `ffuf_dirs`
 - `nmap_syn_safe`
-
-## Example Autopilot Command
-
-```bash
-scanguard autopilot --target example.com --scope examples/scope.txt
-```
-
-## Automatic Findings File
-
-After `scanguard autopilot` finishes, ScanGuard automatically writes a plain-text findings file named:
-
-```text
-target_name.recon.txt
-```
-
-Example:
-
-```text
-example.com.recon.txt
-```
-
-The file is written into the project `reports` directory for that run.
-
-## How To Provide The Target
-
-Pass the target directly with `--target`.
-
-```bash
-scanguard autopilot --target example.com --scope examples/scope.txt
-```

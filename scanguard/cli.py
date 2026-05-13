@@ -25,8 +25,13 @@ from scanguard.storage.workspace import ProjectWorkspace, create_workspace, disc
 from scanguard.utils.files import ensure_dir, write_json
 from scanguard.utils.validators import ScopeAuthorizer, normalize_target
 
-app = typer.Typer(help="AI-assisted reconnaissance for authorized testing on Kali Linux.")
+app = typer.Typer(
+    help="AI-assisted reconnaissance for authorized testing on Kali Linux. Run `scanguard --target example.com` to start.",
+    invoke_without_command=True,
+    no_args_is_help=True,
+)
 console = Console()
+DEFAULT_SCOPE_FILE = Path("scope.txt")
 
 
 def get_settings() -> AppSettings:
@@ -124,58 +129,33 @@ def validate_target_and_scope(target: str, scope_file: Path) -> tuple[str, Scope
     return normalized_target, authorizer
 
 
-@app.command()
-def init() -> None:
-    """Create config files and check available binaries."""
-    settings = get_settings()
-    configure_logging(settings.log_level)
-    prompt_path = ensure_user_prompt()
-    env_path = ensure_env_file(Path.cwd())
-    ensure_dir(settings.workspace_root)
-    registry = get_registry()
-    binaries = sorted({tool.binary for tool in registry.list()})
-    table = Table(title="Tool Availability")
-    table.add_column("Binary")
-    table.add_column("Status")
-    for binary in binaries:
-        from shutil import which
-
-        table.add_row(binary, "installed" if which(binary) else "missing")
-    render_banner()
-    console.print(Panel(f"Prompt file: {prompt_path}\nLocal env file: {env_path}\nWorkspace root: {settings.workspace_root}", title="Initialization"))
-    console.print(table)
+def resolve_scope_file(scope: Path | None) -> Path:
+    """Resolve the operator-provided scope file, defaulting to ./scope.txt."""
+    if scope is not None:
+        return scope
+    default_scope = Path.cwd() / DEFAULT_SCOPE_FILE
+    if default_scope.exists():
+        return default_scope
+    raise typer.BadParameter("No scope file provided. Add ./scope.txt or pass --scope PATH.")
 
 
-@app.command()
-def autopilot(
-    target: str = typer.Option(..., "--target"),
-    scope: Path = typer.Option(..., "--scope"),
-    objective: str = typer.Option(
-        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
-        "--objective",
-        help="Operator intent provided to the AI planner.",
-    ),
-    auto_safe: bool = typer.Option(
-        True,
-        "--auto-safe/--no-auto-safe",
-        help="Allow active_safe tools to run automatically during autopilot.",
-    ),
-    allow_careful: bool = typer.Option(
-        False,
-        "--allow-careful",
-        help="Explicitly allow active_careful tools in the autonomous workflow.",
-    ),
-    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
-    report_format: list[str] = typer.Option(
-        ["markdown", "html", "json"],
-        "--report-format",
-        help="Report formats to generate at the end. Repeat the option to limit formats.",
-    ),
+def _run_autopilot(
+    *,
+    target: str,
+    scope: Path | None,
+    objective: str,
+    auto_safe: bool,
+    allow_careful: bool,
+    max_steps: int,
+    report_format: list[str],
 ) -> None:
-    """Run a one-shot AI-planned recon workflow and generate reports plus target_name.recon.txt."""
     settings = get_settings()
     configure_logging(settings.log_level)
-    normalized_target, authorizer = validate_target_and_scope(target, scope)
+    ensure_user_prompt()
+    ensure_env_file(Path.cwd())
+    ensure_dir(settings.workspace_root)
+    resolved_scope = resolve_scope_file(scope)
+    normalized_target, authorizer = validate_target_and_scope(target, resolved_scope)
     render_banner()
     console.print(
         Panel(
@@ -184,7 +164,12 @@ def autopilot(
         )
     )
 
-    workspace = create_workspace(settings.workspace_root, normalized_target, scope, settings.sqlite_busy_timeout_ms)
+    workspace = create_workspace(
+        settings.workspace_root,
+        normalized_target,
+        resolved_scope,
+        settings.sqlite_busy_timeout_ms,
+    )
     workspace.database.update_project_status(workspace.project.id, "autopilot-running")
     workspace.project.status = "autopilot-running"
     show_project_summary(workspace)
@@ -278,10 +263,11 @@ def autopilot(
         normalized_formats = plan.report_formats
 
     generated_reports: list[str] = []
+    report_generator = ReportGenerator()
     for fmt in normalized_formats:
-        artifact = ReportGenerator().generate(workspace, fmt)
+        artifact = report_generator.generate(workspace, fmt)
         generated_reports.append(str(artifact.path))
-    recon_summary_path = ReportGenerator().generate_recon_summary(workspace)
+    recon_summary_path = report_generator.generate_recon_summary(workspace)
     generated_reports.append(str(recon_summary_path))
 
     summary_payload = {
@@ -308,6 +294,117 @@ def autopilot(
             title="Autopilot Complete",
             border_style="green",
         )
+    )
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    target: str | None = typer.Option(None, "--target", help="Authorized target to scan."),
+    scope: Path | None = typer.Option(
+        None,
+        "--scope",
+        help="Path to the in-scope targets file. Defaults to ./scope.txt if present.",
+    ),
+    objective: str = typer.Option(
+        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
+        "--objective",
+        help="Operator intent provided to the AI planner.",
+    ),
+    auto_safe: bool = typer.Option(
+        True,
+        "--auto-safe/--no-auto-safe",
+        help="Allow active_safe tools to run automatically.",
+    ),
+    allow_careful: bool = typer.Option(
+        False,
+        "--allow-careful",
+        help="Explicitly allow active_careful tools in the autonomous workflow.",
+    ),
+    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
+    report_format: list[str] = typer.Option(
+        ["markdown", "html", "json"],
+        "--report-format",
+        help="Report formats to generate at the end. Repeat the option to limit formats.",
+    ),
+) -> None:
+    """Run autonomous recon when ScanGuard is called without a subcommand."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if target is None:
+        return
+    _run_autopilot(
+        target=target,
+        scope=scope,
+        objective=objective,
+        auto_safe=auto_safe,
+        allow_careful=allow_careful,
+        max_steps=max_steps,
+        report_format=report_format,
+    )
+
+
+@app.command(hidden=True)
+def init() -> None:
+    """Create config files and check available binaries."""
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    prompt_path = ensure_user_prompt()
+    env_path = ensure_env_file(Path.cwd())
+    ensure_dir(settings.workspace_root)
+    registry = get_registry()
+    binaries = sorted({tool.binary for tool in registry.list()})
+    table = Table(title="Tool Availability")
+    table.add_column("Binary")
+    table.add_column("Status")
+    for binary in binaries:
+        from shutil import which
+
+        table.add_row(binary, "installed" if which(binary) else "missing")
+    render_banner()
+    console.print(Panel(f"Prompt file: {prompt_path}\nLocal env file: {env_path}\nWorkspace root: {settings.workspace_root}", title="Initialization"))
+    console.print(table)
+
+
+@app.command(hidden=True)
+def autopilot(
+    target: str = typer.Option(..., "--target"),
+    scope: Path | None = typer.Option(
+        None,
+        "--scope",
+        help="Path to the in-scope targets file. Defaults to ./scope.txt if present.",
+    ),
+    objective: str = typer.Option(
+        "Run a safe reconnaissance workflow, collect findings, and generate reports.",
+        "--objective",
+        help="Operator intent provided to the AI planner.",
+    ),
+    auto_safe: bool = typer.Option(
+        True,
+        "--auto-safe/--no-auto-safe",
+        help="Allow active_safe tools to run automatically during autopilot.",
+    ),
+    allow_careful: bool = typer.Option(
+        False,
+        "--allow-careful",
+        help="Explicitly allow active_careful tools in the autonomous workflow.",
+    ),
+    max_steps: int = typer.Option(8, "--max-steps", min=1, max=20),
+    report_format: list[str] = typer.Option(
+        ["markdown", "html", "json"],
+        "--report-format",
+        help="Report formats to generate at the end. Repeat the option to limit formats.",
+    ),
+) -> None:
+    """Run a one-shot AI-planned recon workflow and generate reports plus target_name.recon.txt."""
+    _run_autopilot(
+        target=target,
+        scope=scope,
+        objective=objective,
+        auto_safe=auto_safe,
+        allow_careful=allow_careful,
+        max_steps=max_steps,
+        report_format=report_format,
     )
 
 
